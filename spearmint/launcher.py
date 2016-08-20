@@ -224,6 +224,7 @@ def launch(db_address, experiment_name, job_id):
 
     db  = MongoDB(database_address=db_address)
     job = db.load(experiment_name, 'jobs', {'id' : job_id})
+    job.pop("_id")
 
     job['start time'] = time.time()
     db.save(job, experiment_name, 'jobs', {'id' : job_id})
@@ -257,14 +258,27 @@ def launch(db_address, experiment_name, job_id):
         job['status']   = 'complete'
         job['end time'] = time.time()
 
+        sys.stderr.write("Saving sample : %s\n"%job)
         db.save(job, experiment_name, 'jobs', {'id' : job_id})
 
         if isinstance(raw_result, list):
             for i in range(len(raw_result)):
-                job['values'] = {'main' : raw_result[i][-1]}
-                for j,k in raw_result[i][0].iteritems():
-                    job['params'][j]["values"][0] = k
-                db.save(job, experiment_name, 'jobs', {'id' : "%d.%d"%(job_id,i)})
+                if i == 0:
+                    continue
+                try:
+                    job['values'] = {'main' : raw_result[i][-1]}
+                    for j,k in raw_result[i][0].iteritems():
+                        job['params'][j]["values"][0] = k
+                    jobs = db.load(experiment_name, 'jobs')
+                    if jobs is None:
+                        jobs = []
+                    elif isinstance(jobs,dict):
+                        jobs = [jobs]
+                    job["id"]=len(jobs)+1
+                    sys.stderr.write("Saving extra sample : %s\n"%job)
+                    db.save(job, experiment_name, 'jobs', {'id' : job["id"]})
+                except:
+                    sys.stderr.write("Error extra sample : %s\n"%raw_result[i])
 
     except:
         import traceback
@@ -276,27 +290,6 @@ def launch(db_address, experiment_name, job_id):
         job['end time'] = time.time()
 
         db.save(job, experiment_name, 'jobs', {'id' : job_id})
-
-def python_launcher(job):
-    sys.path.append(os.path.realpath(job['expt_dir']))
-    os.chdir(job['expt_dir'])
-    params = {}
-    for name, param in job['params'].iteritems():
-        vals = param['values']
-        if param['type'].lower() == 'float':
-            params[name] = np.array(vals)
-        else:
-            raise Exception("Unknown parameter type.")
-    main_file = job['main-file']
-    if main_file[-3:] == '.py':
-        main_file = main_file[:-3]
-    sys.stderr.write('Importing %s.py\n' % main_file)
-    module  = __import__(main_file)
-    sys.stderr.write('Running %s.main()\n' % main_file)
-    result = module.main(job['id'], params)
-    os.chdir('..')
-    sys.stderr.write("Got result %s\n" % (result))
-    return result
 
 if __name__ == '__main__':
     main()
