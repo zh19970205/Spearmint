@@ -282,6 +282,8 @@ def launch(db_address, experiment_name, job_id):
         job['values']   = result
         job['status']   = 'complete'
         job['end time'] = end_time
+	print "##############"
+	print (job['params'],job['values'])
 
     else:
         sys.stderr.write("Job failed in %0.2f seconds.\n" % (end_time-start_time))
