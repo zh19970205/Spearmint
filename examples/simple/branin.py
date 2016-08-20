@@ -8,12 +8,8 @@ def branin(x, y):
     
     result = float(result)
 
-    print "param = %d, %d"%(x,y)
-    print 'Result = %f' % result
-    #time.sleep(np.random.randint(60))
     return [{"x":x,"y":y},result]
 
-# Write a function like this called 'main'
 def main(job_id, params):
     x=params["x"]
     y=params["y"]
