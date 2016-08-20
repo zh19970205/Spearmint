@@ -186,7 +186,6 @@ import os
 import sys
 import time
 import optparse
-import subprocess
 import numpy as np
 
 from spearmint.utils.database.mongodb import MongoDB
@@ -236,17 +235,8 @@ def launch(db_address, experiment_name, job_id):
     success = False
 
     try:
-        if job['language'].lower() == 'matlab':
-            result = matlab_launcher(job)
-
-        elif job['language'].lower() == 'python':
+        if job['language'].lower() == 'python':
             result = python_launcher(job)
-
-        elif job['language'].lower() == 'shell':
-            result = shell_launcher(job)
-
-        elif job['language'].lower() == 'mcr':
-            result = mcr_launcher(job)
 
         else:
             raise Exception("That language has not been implemented.")
