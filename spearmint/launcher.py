@@ -225,91 +225,68 @@ def launch(db_address, experiment_name, job_id):
     db  = MongoDB(database_address=db_address)
     job = db.load(experiment_name, 'jobs', {'id' : job_id})
 
-    start_time        = time.time()
-    job['start time'] = start_time
+    job['start time'] = time.time()
     db.save(job, experiment_name, 'jobs', {'id' : job_id})
 
-    sys.stderr.write("Job launching after %0.2f seconds in submission.\n" 
-                     % (start_time-job['submit time']))
-
-    success = False
-
     try:
-        if job['language'].lower() == 'python':
-            result = python_launcher(job)
-
-        else:
-            raise Exception("That language has not been implemented.")
-
-        if not isinstance(result, dict):
-            # Returning just NaN means NaN on all tasks
-            if np.isnan(result):
-                # Apparently this dict generator throws an error for some people??
-                # result = {task_name: np.nan for task_name in job['tasks']}
-                # So we use the much uglier version below... ????
-                result = dict(zip(job['tasks'], [np.nan]*len(job['tasks'])))
-            elif len(job['tasks']) == 1: # Only one named job
-                result = {job['tasks'][0] : result}
+        sys.path.append(os.path.realpath(job['expt_dir']))
+        os.chdir(job['expt_dir'])
+        params = {}
+        for name, param in job['params'].iteritems():
+            vals = param['values']
+            if param['type'].lower() == 'float':
+                params[name] = np.array(vals)
             else:
-                result = {'main' : result}
-        
-        if set(result.keys()) != set(job['tasks']):
-            raise Exception("Result task names %s did not match job task names %s." % (result.keys(), job['tasks']))
+                raise Exception("Unknown parameter type.")
+        main_file = job['main-file']
+        if main_file[-3:] == '.py':
+            main_file = main_file[:-3]
+        sys.stderr.write('Importing %s.py\n' % main_file)
+        module  = __import__(main_file)
+        sys.stderr.write('Running %s.main()\n' % main_file)
+        raw_result = module.main(job['id'], params)
+        os.chdir('..')
+        sys.stderr.write("Got result %s\n" % (raw_result))
 
-        success = True
+        if isinstance(raw_result,list):
+            result = {'main' : raw_result[0][-1]}
+        else:
+            result = {'main' : raw_result}
+
+        job['values']   = result
+        job['status']   = 'complete'
+        job['end time'] = time.time()
+
+        db.save(job, experiment_name, 'jobs', {'id' : job_id})
+
+        if isinstance(raw_result, list):
+            for i in range(len(raw_result)):
+                job['values'] = {'main' : raw_result[i][-1]}
+                for j,k in raw_result[i][0].iteritems():
+                    job['params'][j]["values"][0] = k
+                db.save(job, experiment_name, 'jobs', {'id' : "%d.%d"%(job_id,i)})
+
     except:
         import traceback
         traceback.print_exc()
         sys.stderr.write("Problem executing the function\n")
         print sys.exc_info()
-        
-    end_time = time.time()
 
-    if success:
-        sys.stderr.write("Completed successfully in %0.2f seconds. [%s]\n" 
-                         % (end_time-start_time, result))
-        
-        job['values']   = result
-        job['status']   = 'complete'
-        job['end time'] = end_time
-	print "##############"
-	print (job['params'],job['values'])
-
-    else:
-        sys.stderr.write("Job failed in %0.2f seconds.\n" % (end_time-start_time))
-    
-        # Update metadata.
         job['status']   = 'broken'
-        job['end time'] = end_time
+        job['end time'] = time.time()
 
-    db.save(job, experiment_name, 'jobs', {'id' : job_id})
+        db.save(job, experiment_name, 'jobs', {'id' : job_id})
 
 def python_launcher(job):
-    # Run a Python function
-    sys.stderr.write("Running python job.\n")
-
-    # Add directory to the system path.
     sys.path.append(os.path.realpath(job['expt_dir']))
-
-    # Change into the directory.
     os.chdir(job['expt_dir'])
-    sys.stderr.write("Changed into dir %s\n" % (os.getcwd()))
-
-    # Convert the JSON object into useful parameters.
     params = {}
     for name, param in job['params'].iteritems():
         vals = param['values']
-
         if param['type'].lower() == 'float':
             params[name] = np.array(vals)
-        elif param['type'].lower() == 'int':
-            params[name] = np.array(vals, dtype=int)
-        elif param['type'].lower() == 'enum':
-            params[name] = vals
         else:
             raise Exception("Unknown parameter type.")
-
-    # Load up this module and run
     main_file = job['main-file']
     if main_file[-3:] == '.py':
         main_file = main_file[:-3]
@@ -317,14 +294,8 @@ def python_launcher(job):
     module  = __import__(main_file)
     sys.stderr.write('Running %s.main()\n' % main_file)
     result = module.main(job['id'], params)
-
-    # Change back out.
     os.chdir('..')
-
-    # TODO: add dict capability
-
     sys.stderr.write("Got result %s\n" % (result))
-
     return result
 
 if __name__ == '__main__':
