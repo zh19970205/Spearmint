@@ -106,6 +106,7 @@ def main():
                 # Submit the job to the appropriate resource
                 process_id = resource.attemptDispatch(experiment_name, suggested_job, db_address, expt_dir)
 
+                suggested_job = db.load(experiment_name, "jobs", {"id" : suggested_job["id"]})
                 # Set the status of the job appropriately (successfully submitted or not)
                 if process_id is None:
                     suggested_job['status'] = 'broken'
