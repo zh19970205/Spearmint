@@ -196,8 +196,12 @@ class LocalScheduler(AbstractScheduler):
 
     def submit(self, job_id, experiment_name, experiment_dir, database_address):
         base_path = os.path.dirname(os.path.realpath(spearmint.__file__))
+        if os.path.exists("%s/launcher.py"%experiment_dir):
+            launch_path = experiment_dir
+        else:
+            launch_path = base_path
         cmd = ('python %s/launcher.py --database-address %s --experiment-name %s --job-id %s' % 
-               (base_path, database_address, experiment_name, job_id))
+               (launch_path, database_address, experiment_name, job_id))
         
         output_directory = os.path.join(experiment_dir, 'output')
         if not os.path.isdir(output_directory):
